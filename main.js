@@ -1,8 +1,10 @@
-const { app, BrowserWindow, Menu } = require("electron");
+const { app, BrowserWindow, Menu, dialog } = require("electron");
 const path = require("path");
 
 // 保持对window对象的引用，否则当JavaScript对象被垃圾回收时，window对象将被自动关闭
 let mainWindow;
+// 添加退出标志
+let willQuitApp = false;
 
 function createWindow() {
   // 创建浏览器窗口
@@ -22,6 +24,33 @@ function createWindow() {
   // 打开开发者工具（可选）
   // mainWindow.webContents.openDevTools()
 
+  // 拦截窗口关闭事件
+  mainWindow.on("close", function (e) {
+    // 如果不是通过确认对话框关闭，则阻止默认关闭行为
+    if (!willQuitApp) {
+      e.preventDefault();
+
+      // 显示确认对话框
+      dialog
+        .showMessageBox(mainWindow, {
+          type: "question",
+          buttons: ["确认", "取消"],
+          title: "确认退出",
+          message: "确定要退出应用吗?",
+          defaultId: 0, // 默认选中的按钮索引
+          cancelId: 1, // 取消按钮的索引
+        })
+        .then((result) => {
+          if (result.response === 0) {
+            // 用户点击了"确认"
+            willQuitApp = true;
+            app.quit();
+          }
+          // 如果用户点击"取消"，则不做任何操作，应用继续运行
+        });
+    }
+  });
+
   // 当window被关闭时触发
   mainWindow.on("closed", function () {
     mainWindow = null;
@@ -37,7 +66,31 @@ function createWindow() {
   const menu = Menu.buildFromTemplate([
     {
       label: "文件",
-      submenu: [{ role: "quit", label: "退出" }],
+      submenu: [
+        {
+          label: "退出",
+          accelerator: process.platform === "darwin" ? "Command+Q" : "Ctrl+Q",
+          click: () => {
+            // 点击菜单退出时也显示确认对话框
+            dialog
+              .showMessageBox(mainWindow, {
+                type: "question",
+                buttons: ["确认", "取消"],
+                title: "确认退出",
+                message: "确定要退出应用吗?",
+                defaultId: 0,
+                cancelId: 1,
+              })
+              .then((result) => {
+                if (result.response === 0) {
+                  // 用户点击了"确认"
+                  willQuitApp = true;
+                  app.quit();
+                }
+              });
+          },
+        },
+      ],
     },
     {
       label: "区域",
@@ -130,4 +183,9 @@ app.on("window-all-closed", function () {
 app.on("activate", function () {
   // 在macOS上，当点击dock图标且没有其他窗口打开时，通常会重新创建一个窗口
   if (mainWindow === null) createWindow();
+});
+
+// 应用退出前的处理
+app.on("before-quit", () => {
+  willQuitApp = true;
 });
