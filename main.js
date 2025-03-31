@@ -40,15 +40,70 @@ function createWindow() {
       submenu: [{ role: "quit", label: "退出" }],
     },
     {
-      label: "导航",
+      label: "区域",
       submenu: [
         {
-          label: "首页",
-          click: () => mainWindow.loadURL("https://www.example.com"),
+          label: "美国东部（弗吉尼亚北部）",
+          click: () =>
+            mainWindow.loadURL(
+              "https://connect-us-1.my.connect.aws/agent-app-v2"
+            ),
         },
         {
-          label: "第二个页面",
-          click: () => mainWindow.loadURL("https://www.example.com/page2"),
+          label: "美国西部（俄勒冈）",
+          click: () =>
+            mainWindow.loadURL(
+              "https://connect-us.my.connect.aws/agent-app-v2"
+            ),
+        },
+
+        {
+          label: "亚太地区（首尔）",
+          click: () => mainWindow.loadURL(""),
+        },
+        {
+          label: "亚太地区（新加坡）",
+          click: () =>
+            mainWindow.loadURL(
+              "https://connect-sg-1.my.connect.aws/agent-app-v2"
+            ),
+        },
+        {
+          label: "亚太地区（悉尼）",
+          click: () =>
+            mainWindow.loadURL(
+              "https://connect-syd-1.my.connect.aws/agent-app-v2"
+            ),
+        },
+        {
+          label: "亚太地区（东京）",
+          click: () =>
+            mainWindow.loadURL(
+              "https://connect-jp-0907.my.connect.aws/agent-app-v2"
+            ),
+        },
+        {
+          label: "加拿大（中部）",
+          click: () => mainWindow.loadURL(""),
+        },
+        {
+          label: "欧洲（法兰克福）",
+          click: () =>
+            mainWindow.loadURL("https://eu-c-1.my.connect.aws/agent-app-v2"),
+        },
+        {
+          label: "欧洲（伦敦）",
+          click: () =>
+            mainWindow.loadURL(
+              "https://connect-eu-2.my.connect.aws/agent-app-v2"
+            ),
+        },
+        {
+          label: "非洲（开普敦）",
+          click: () =>
+            mainWindow.loadURL(
+              "https://connect-us.my.connect.aws/agent-app-v2"
+            ),
         },
         { type: "separator" },
         {
