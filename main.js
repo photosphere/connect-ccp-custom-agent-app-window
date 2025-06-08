@@ -158,6 +158,18 @@ function createWindow() {
   updateTabList();
 }
 
+// 获取退出URL
+function getLogoutUrl(url) {
+  if (!url) return null;
+  
+  // 从URL中提取域名部分
+  const match = url.match(/^(https?:\/\/[^\/]+)/);
+  if (match) {
+    return `${match[1]}/logout`;
+  }
+  return null;
+}
+
 // 创建应用窗口
 function createAppWindow(id, url, title) {
   // 如果窗口已存在，则聚焦该窗口
@@ -174,10 +186,14 @@ function createAppWindow(id, url, title) {
     return;
   }
   
+  // 获取退出URL
+  const logoutUrl = getLogoutUrl(url);
+  
   // 存储窗口信息
   appWindows[id] = {
     title: title,
-    url: url
+    url: url,
+    logoutUrl: logoutUrl
   };
   
   // 通知渲染进程创建webview
@@ -217,6 +233,16 @@ function closeAppWindow(id) {
     }).then((result) => {
       if (result.response === 0) {
         // 用户点击了"确认"
+        const logoutUrl = appWindows[id].logoutUrl;
+        
+        // 如果有退出URL，执行退出操作
+        if (logoutUrl) {
+          mainWindow.webContents.send('execute-logout', {
+            id: id,
+            logoutUrl: logoutUrl
+          });
+        }
+        
         delete appWindows[id];
         updateTabList();
         // 通知渲染进程移除webview

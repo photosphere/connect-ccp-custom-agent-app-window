@@ -50,6 +50,29 @@ ipcRenderer.on('remove-webview', (event, id) => {
   }
 });
 
+// 监听执行退出操作事件
+ipcRenderer.on('execute-logout', (event, { id, logoutUrl }) => {
+  const webviewContainer = document.querySelector(`.webview-container[data-id="${id}"]`);
+  if (webviewContainer) {
+    const webview = webviewContainer.querySelector('webview');
+    if (webview) {
+      // 执行退出脚本
+      webview.executeJavaScript(`
+        fetch("${logoutUrl}", { credentials: 'include', mode: 'no-cors' })
+          .then(() => {
+            if (typeof connect !== 'undefined' && connect.core) {
+              const eventBus = connect.core.getEventBus();
+              if (eventBus) {
+                eventBus.trigger(connect.EventType.TERMINATE);
+              }
+            }
+          })
+          .catch(err => console.error("退出操作失败:", err));
+      `);
+    }
+  }
+});
+
 // 创建webview
 function createWebView(id, url) {
   // 检查是否已存在
@@ -67,6 +90,8 @@ function createWebView(id, url) {
   const webview = document.createElement('webview');
   webview.src = url;
   webview.nodeintegration = true;
+  webview.allowpopups = true;
+  webview.preload = './webview-preload.js';
   
   container.appendChild(webview);
   contentContainer.appendChild(container);
