@@ -11,3 +11,5 @@ npm start
 
 ## 多区域 View Screenshot
 <img width="1404" alt="Image" src="https://github.com/user-attachments/assets/997eb031-c9a3-4f0f-8168-f5e07139ffea" />
+
+<img width="1404" alt="Image" src="https://github.com/user-attachments/assets/f45a1ff5-6c38-4c08-b32c-368425f29590" />
