@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain } = require("electron");
 const path = require("path");
+const fs = require("fs");
 
 // 保持对window对象的引用，否则当JavaScript对象被垃圾回收时，window对象将被自动关闭
 let mainWindow;
@@ -7,6 +8,8 @@ let mainWindow;
 let willQuitApp = false;
 // 存储所有打开的应用窗口
 let appWindows = {};
+// 存储区域配置
+let regions = [];
 
 function createWindow() {
   // 创建浏览器窗口
@@ -99,46 +102,7 @@ function createWindow() {
     {
       label: "区域",
       submenu: [
-        {
-          label: "美国东部（弗吉尼亚北部）",
-          click: () => createAppWindow("us-east-1", "https://connect-us-1.my.connect.aws/agent-app-v2", "美国东部（弗吉尼亚北部）"),
-        },
-        {
-          label: "美国西部（俄勒冈）",
-          click: () => createAppWindow("us-west-2", "https://connect-us.my.connect.aws/agent-app-v2", "美国西部（俄勒冈）"),
-        },
-        {
-          label: "亚太地区（首尔）",
-          click: () => createAppWindow("ap-northeast-2", "", "亚太地区（首尔）"),
-        },
-        {
-          label: "亚太地区（新加坡）",
-          click: () => createAppWindow("ap-southeast-1", "https://connect-sg-1.my.connect.aws/agent-app-v2", "亚太地区（新加坡）"),
-        },
-        {
-          label: "亚太地区（悉尼）",
-          click: () => createAppWindow("ap-southeast-2", "https://connect-syd-1.my.connect.aws/agent-app-v2", "亚太地区（悉尼）"),
-        },
-        {
-          label: "亚太地区（东京）",
-          click: () => createAppWindow("ap-northeast-1", "https://connect-jp-0907.my.connect.aws/agent-app-v2", "亚太地区（东京）"),
-        },
-        {
-          label: "加拿大（中部）",
-          click: () => createAppWindow("ca-central-1", "", "加拿大（中部）"),
-        },
-        {
-          label: "欧洲（法兰克福）",
-          click: () => createAppWindow("eu-central-1", "https://eu-c-1.my.connect.aws/agent-app-v2", "欧洲（法兰克福）"),
-        },
-        {
-          label: "欧洲（伦敦）",
-          click: () => createAppWindow("eu-west-2", "https://connect-eu-2.my.connect.aws/agent-app-v2", "欧洲（伦敦）"),
-        },
-        {
-          label: "非洲（开普敦）",
-          click: () => createAppWindow("af-south-1", "https://connect-us.my.connect.aws/agent-app-v2", "非洲（开普敦）"),
-        },
+        ...buildRegionSubmenu(),
         { type: "separator" },
         {
           label: "刷新",
@@ -207,6 +171,39 @@ function createAppWindow(id, url, title) {
   updateTabList();
 }
 
+// 加载XML配置
+function loadRegionsConfig() {
+  try {
+    const xmlPath = path.join(__dirname, 'regions.xml');
+    const xmlData = fs.readFileSync(xmlPath, 'utf8');
+    
+    // 简单的XML解析
+    const regionMatches = xmlData.match(/<region>[\s\S]*?<\/region>/g);
+    regions = [];
+    
+    if (regionMatches) {
+      regionMatches.forEach(regionXml => {
+        const id = regionXml.match(/<id>([^<]*)<\/id>/)?.[1] || '';
+        const label = regionXml.match(/<label>([^<]*)<\/label>/)?.[1] || '';
+        const url = regionXml.match(/<url>([^<]*)<\/url>/)?.[1] || '';
+        const title = regionXml.match(/<title>([^<]*)<\/title>/)?.[1] || '';
+        
+        regions.push({ id, label, url, title });
+      });
+    }
+  } catch (error) {
+    console.error('加载XML配置失败:', error);
+  }
+}
+
+// 构建区域子菜单
+function buildRegionSubmenu() {
+  return regions.map(region => ({
+    label: region.label,
+    click: () => createAppWindow(region.id, region.url, region.title)
+  }));
+}
+
 // 更新标签页列表
 function updateTabList() {
   if (mainWindow) {
@@ -254,6 +251,7 @@ function closeAppWindow(id) {
 
 // 当Electron完成初始化并准备创建浏览器窗口时调用此方法
 app.whenReady().then(() => {
+  loadRegionsConfig();
   createWindow();
   
   // 设置IPC通信
