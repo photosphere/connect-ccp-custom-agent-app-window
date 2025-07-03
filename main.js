@@ -69,54 +69,7 @@ function createWindow() {
   // 在页面加载完成后执行
   mainWindow.webContents.on("did-finish-load", () => {});
 
-  // 创建简单菜单
-  const menu = Menu.buildFromTemplate([
-    {
-      label: "文件",
-      submenu: [
-        {
-          label: "退出",
-          accelerator: process.platform === "darwin" ? "Command+Q" : "Ctrl+Q",
-          click: () => {
-            // 点击菜单退出时也显示确认对话框
-            dialog
-              .showMessageBox(mainWindow, {
-                type: "question",
-                buttons: ["确认", "取消"],
-                title: "确认退出",
-                message: "确定要退出应用吗?",
-                defaultId: 0,
-                cancelId: 1,
-              })
-              .then((result) => {
-                if (result.response === 0) {
-                  // 用户点击了"确认"
-                  willQuitApp = true;
-                  app.quit();
-                }
-              });
-          },
-        },
-      ],
-    },
-    {
-      label: "区域",
-      submenu: [
-        ...buildRegionSubmenu(),
-        { type: "separator" },
-        {
-          label: "刷新",
-          accelerator: "CmdOrCtrl+R",
-          click: () => {
-            const focusedWindow = BrowserWindow.getFocusedWindow();
-            if (focusedWindow) focusedWindow.reload();
-          },
-        },
-      ],
-    },
-  ]);
-
-  Menu.setApplicationMenu(menu);
+  updateMenu();
   
   // 更新标签页列表
   updateTabList();
@@ -199,7 +152,7 @@ function loadRegionsConfig() {
 // 构建区域子菜单
 function buildRegionSubmenu() {
   return regions.map(region => ({
-    label: region.label,
+    label: appWindows[region.id] ? `${region.label} ✓` : region.label,
     click: () => createAppWindow(region.id, region.url, region.title)
   }));
 }
@@ -214,6 +167,9 @@ function updateTabList() {
       };
     });
     mainWindow.webContents.send('update-tabs', tabList);
+    
+    // 更新菜单以反映tab状态
+    updateMenu();
   }
 }
 
@@ -247,6 +203,55 @@ function closeAppWindow(id) {
       }
     });
   }
+}
+
+// 更新菜单
+function updateMenu() {
+  const menu = Menu.buildFromTemplate([
+    {
+      label: "文件",
+      submenu: [
+        {
+          label: "退出",
+          accelerator: process.platform === "darwin" ? "Command+Q" : "Ctrl+Q",
+          click: () => {
+            dialog
+              .showMessageBox(mainWindow, {
+                type: "question",
+                buttons: ["确认", "取消"],
+                title: "确认退出",
+                message: "确定要退出应用吗?",
+                defaultId: 0,
+                cancelId: 1,
+              })
+              .then((result) => {
+                if (result.response === 0) {
+                  willQuitApp = true;
+                  app.quit();
+                }
+              });
+          },
+        },
+      ],
+    },
+    {
+      label: "区域",
+      submenu: [
+        ...buildRegionSubmenu(),
+        { type: "separator" },
+        {
+          label: "刷新",
+          accelerator: "CmdOrCtrl+R",
+          click: () => {
+            const focusedWindow = BrowserWindow.getFocusedWindow();
+            if (focusedWindow) focusedWindow.reload();
+          },
+        },
+      ],
+    },
+  ]);
+  
+  Menu.setApplicationMenu(menu);
 }
 
 // 当Electron完成初始化并准备创建浏览器窗口时调用此方法
