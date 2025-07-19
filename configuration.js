@@ -9,6 +9,50 @@ let deletedRegions = [];
 // 存储原始区域数据，用于比较变更
 let originalRegions = [];
 
+// 区域数据源
+const regionOptions = [
+    {
+        "Region": "us-east-1",
+        "FriendlyName": "美国东部（弗吉尼亚北部）"
+    },
+    {
+        "Region": "us-west-2",
+        "FriendlyName": "美国西部（俄勒冈）"
+    },
+    {
+        "Region": "ca-central-1",
+        "FriendlyName": "加拿大（中央）"
+    },
+    {
+        "Region": "eu-west-2",
+        "FriendlyName": "欧洲（伦敦）"
+    },
+    {
+        "Region": "eu-central-1",
+        "FriendlyName": "欧洲（法兰克福）"
+    },
+    {
+        "Region": "ap-southeast-1",
+        "FriendlyName": "亚太地区（新加坡）"
+    },
+    {
+        "Region": "ap-southeast-2",
+        "FriendlyName": "亚太地区（悉尼）"
+    },
+    {
+        "Region": "ap-northeast-1",
+        "FriendlyName": "亚太地区（东京）"
+    },
+    {
+        "Region": "ap-northeast-2",
+        "FriendlyName": "亚太地区（首尔）"
+    },
+    {
+        "Region": "sa-east-1",
+        "FriendlyName": "南美洲（圣保罗）"
+    }
+];
+
 // DOM元素
 const regionTableBody = document.getElementById('regionTableBody');
 const editForm = document.getElementById('editForm');
@@ -31,7 +75,39 @@ ipcRenderer.on('init-regions', (event, data) => {
   originalRegions = JSON.parse(JSON.stringify(data)); // 深拷贝原始数据
   regions = JSON.parse(JSON.stringify(data)); // 深拷贝
   renderRegionsTable();
+  populateRegionDropdown();
 });
+
+// 填充区域下拉框
+function populateRegionDropdown() {
+  // 清空现有选项，保留第一个默认选项
+  while (regionId.options.length > 1) {
+    regionId.remove(1);
+  }
+  
+  // 添加新选项
+  regionOptions.forEach(option => {
+    const optionElement = document.createElement('option');
+    optionElement.value = option.Region;
+    optionElement.textContent = `${option.Region} - ${option.FriendlyName}`;
+    regionId.appendChild(optionElement);
+  });
+  
+  // 添加区域ID变化事件监听
+  regionId.addEventListener('change', updateLabelFromRegion);
+}
+
+// 根据选择的区域更新标签
+function updateLabelFromRegion() {
+  const selectedRegion = regionId.value;
+  const regionInfo = regionOptions.find(option => option.Region === selectedRegion);
+  
+  if (regionInfo) {
+    regionLabel.value = regionInfo.FriendlyName;
+  } else {
+    regionLabel.value = '';
+  }
+}
 
 // 渲染区域表格
 function renderRegionsTable() {
@@ -142,7 +218,7 @@ cancelEditBtn.addEventListener('click', () => {
 saveEditBtn.addEventListener('click', () => {
   // 验证表单
   if (!regionId.value.trim()) {
-    alert('区域ID不能为空');
+    alert('请选择区域ID');
     return;
   }
   
@@ -150,7 +226,7 @@ saveEditBtn.addEventListener('click', () => {
     id: regionId.value.trim(),
     label: regionLabel.value.trim(),
     url: regionUrl.value.trim(),
-    title: regionTitle.value.trim()
+    title: regionTitle.value.trim() || regionLabel.value.trim() // 如果标题为空，使用标签值
   };
   
   if (currentEditIndex === -1) {
