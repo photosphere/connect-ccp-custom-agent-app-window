@@ -10,6 +10,8 @@ let willQuitApp = false;
 let appWindows = {};
 // 存储区域配置
 let regions = [];
+// 配置窗口
+let configWindow = null;
 
 function createWindow() {
   // 创建浏览器窗口
@@ -135,18 +137,93 @@ function loadRegionsConfig() {
     regions = [];
     
     if (regionMatches) {
-      regionMatches.forEach(regionXml => {
+      regionMatches.forEach((regionXml, index) => {
         const id = regionXml.match(/<id>([^<]*)<\/id>/)?.[1] || '';
         const label = regionXml.match(/<label>([^<]*)<\/label>/)?.[1] || '';
         const url = regionXml.match(/<url>([^<]*)<\/url>/)?.[1] || '';
         const title = regionXml.match(/<title>([^<]*)<\/title>/)?.[1] || '';
         
-        regions.push({ id, label, url, title });
+        regions.push({ id, label, url, title, originalIndex: index });
       });
     }
   } catch (error) {
     console.error('加载XML配置失败:', error);
   }
+}
+
+// 保存XML配置
+function saveRegionsConfig(updatedRegions, deletedRegions) {
+  try {
+    const xmlPath = path.join(__dirname, 'regions.xml');
+    let xmlData = '<?xml version="1.0" encoding="UTF-8"?>\n<regions>\n';
+    
+    // 添加所有区域
+    updatedRegions.forEach(region => {
+      xmlData += '  <region>\n';
+      xmlData += `    <id>${escapeXml(region.id)}</id>\n`;
+      xmlData += `    <label>${escapeXml(region.label)}</label>\n`;
+      xmlData += `    <url>${escapeXml(region.url)}</url>\n`;
+      xmlData += `    <title>${escapeXml(region.title)}</title>\n`;
+      xmlData += '  </region>\n';
+    });
+    
+    xmlData += '</regions>';
+    
+    // 写入文件
+    fs.writeFileSync(xmlPath, xmlData, 'utf8');
+    
+    // 重新加载配置
+    loadRegionsConfig();
+    
+    return true;
+  } catch (error) {
+    console.error('保存XML配置失败:', error);
+    return false;
+  }
+}
+
+// XML字符转义
+function escapeXml(unsafe) {
+  if (typeof unsafe !== 'string') return '';
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+// 创建配置窗口
+function createConfigWindow() {
+  // 如果配置窗口已存在，则聚焦
+  if (configWindow) {
+    configWindow.focus();
+    return;
+  }
+  
+  configWindow = new BrowserWindow({
+    width: 800,
+    height: 600,
+    parent: mainWindow,
+    modal: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    },
+    title: "区域配置"
+  });
+  
+  configWindow.loadFile('configuration.html');
+  
+  // 窗口准备好后发送区域数据
+  configWindow.webContents.on('did-finish-load', () => {
+    configWindow.webContents.send('init-regions', regions);
+  });
+  
+  // 窗口关闭时清除引用
+  configWindow.on('closed', () => {
+    configWindow = null;
+  });
 }
 
 // 构建区域子菜单
@@ -212,6 +289,11 @@ function updateMenu() {
       label: "文件",
       submenu: [
         {
+          label: "配置",
+          accelerator: "CmdOrCtrl+,",
+          click: () => createConfigWindow()
+        },
+        {
           label: "退出",
           accelerator: process.platform === "darwin" ? "Command+Q" : "Ctrl+Q",
           click: () => {
@@ -267,6 +349,39 @@ app.whenReady().then(() => {
   ipcMain.on('focus-app-window', (event, id) => {
     if (appWindows[id]) {
       mainWindow.webContents.send('focus-tab', id);
+    }
+  });
+  
+  // 配置窗口通信
+  ipcMain.on('close-config', () => {
+    if (configWindow) {
+      configWindow.close();
+    }
+  });
+  
+  ipcMain.on('save-regions', (event, { regions: updatedRegions, deletedRegions }) => {
+    if (saveRegionsConfig(updatedRegions, deletedRegions)) {
+      dialog.showMessageBox(configWindow, {
+        type: "info",
+        title: "保存成功",
+        message: "区域配置已成功保存",
+        buttons: ["确定"]
+      }).then(() => {
+        if (configWindow) {
+          configWindow.close();
+        }
+        // 重新加载区域配置
+        loadRegionsConfig();
+        // 更新菜单以反映新的区域配置
+        updateMenu();
+      });
+    } else {
+      dialog.showMessageBox(configWindow, {
+        type: "error",
+        title: "保存失败",
+        message: "保存区域配置时出错",
+        buttons: ["确定"]
+      });
     }
   });
 });
