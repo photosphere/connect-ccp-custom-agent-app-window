@@ -2,12 +2,21 @@ const { ipcRenderer } = require('electron');
 
 // 存储区域数据
 let regions = [];
-// 当前编辑的区域索引
-let currentEditIndex = -1;
+// 当前编辑的区域guid
+let currentEditGuid = null;
 // 标记已删除的区域
 let deletedRegions = [];
 // 存储原始区域数据，用于比较变更
 let originalRegions = [];
+
+// 生成GUID
+function generateGuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 
 // 区域数据源
 const regionOptions = [
@@ -113,7 +122,7 @@ function updateLabelFromRegion() {
 function renderRegionsTable() {
   regionTableBody.innerHTML = '';
   
-  regions.forEach((region, index) => {
+  regions.forEach((region) => {
     const row = document.createElement('tr');
     
     // ID列
@@ -145,14 +154,14 @@ function renderRegionsTable() {
     editButton.textContent = '编辑';
     editButton.className = 'btn-primary btn-sm';
     editButton.style.marginRight = '5px';
-    editButton.addEventListener('click', () => editRegion(index));
+    editButton.addEventListener('click', () => editRegion(region.guid));
     actionCell.appendChild(editButton);
     
     // 删除按钮
     const deleteButton = document.createElement('button');
     deleteButton.textContent = '删除';
     deleteButton.className = 'btn-danger btn-sm';
-    deleteButton.addEventListener('click', () => deleteRegion(index));
+    deleteButton.addEventListener('click', () => deleteRegion(region.guid));
     actionCell.appendChild(deleteButton);
     
     row.appendChild(actionCell);
@@ -161,9 +170,9 @@ function renderRegionsTable() {
 }
 
 // 编辑区域
-function editRegion(index) {
-  currentEditIndex = index;
-  const region = regions[index];
+function editRegion(guid) {
+  currentEditGuid = guid;
+  const region = regions.find(r => r.guid === guid);
   
   formTitle.textContent = '编辑区域';
   regionId.value = region.id;
@@ -177,24 +186,24 @@ function editRegion(index) {
 }
 
 // 删除区域
-function deleteRegion(index) {
-  const regionToDelete = regions[index];
+function deleteRegion(guid) {
+  const regionToDelete = regions.find(r => r.guid === guid);
   const confirmMessage = `确定要删除区域 "${regionToDelete.label}" (${regionToDelete.id}) 吗？`;
   
   if (confirm(confirmMessage)) {
     // 如果是已有的区域，记录到删除列表中
-    if (regions[index].originalIndex !== undefined) {
-      deletedRegions.push(regions[index].originalIndex);
+    if (regionToDelete.originalGuid) {
+      deletedRegions.push(regionToDelete.originalGuid);
     }
     
-    regions.splice(index, 1);
+    regions = regions.filter(r => r.guid !== guid);
     renderRegionsTable();
   }
 }
 
 // 新增区域
 addRegionBtn.addEventListener('click', () => {
-  currentEditIndex = -1;
+  currentEditGuid = null;
   formTitle.textContent = '新增区域';
   
   regionId.value = '';
@@ -229,15 +238,19 @@ saveEditBtn.addEventListener('click', () => {
     title: regionTitle.value.trim() || regionLabel.value.trim() // 如果标题为空，使用标签值
   };
   
-  if (currentEditIndex === -1) {
+  if (currentEditGuid === null) {
     // 新增
+    regionData.guid = generateGuid();
     regions.push(regionData);
   } else {
-    // 编辑，保留原始索引
-    if (regions[currentEditIndex].originalIndex !== undefined) {
-      regionData.originalIndex = regions[currentEditIndex].originalIndex;
+    // 编辑，保留原始guid
+    const existingRegion = regions.find(r => r.guid === currentEditGuid);
+    regionData.guid = currentEditGuid;
+    if (existingRegion.originalGuid) {
+      regionData.originalGuid = existingRegion.originalGuid;
     }
-    regions[currentEditIndex] = regionData;
+    const index = regions.findIndex(r => r.guid === currentEditGuid);
+    regions[index] = regionData;
   }
   
   renderRegionsTable();
@@ -255,11 +268,12 @@ cancelButton.addEventListener('click', () => {
 saveButton.addEventListener('click', () => {
   // 处理数据以去除不需要的属性
   const cleanRegions = regions.map(region => ({
+    guid: region.guid,
     id: region.id,
     label: region.label,
     url: region.url,
     title: region.title,
-    originalIndex: region.originalIndex
+    originalGuid: region.originalGuid
   }));
   
   ipcRenderer.send('save-regions', { regions: cleanRegions, deletedRegions });
