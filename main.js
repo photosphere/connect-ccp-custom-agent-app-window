@@ -1,6 +1,8 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const https = require("https");
+const http = require("http");
 
 // 保持对window对象的引用，否则当JavaScript对象被垃圾回收时，window对象将被自动关闭
 let mainWindow;
@@ -12,6 +14,16 @@ let appWindows = {};
 let regions = [];
 // 配置窗口
 let configWindow = null;
+// 延迟检测窗口
+let latencyWindow = null;
+// 延迟检测状态
+let latencyCheckState = {
+  isRunning: false,
+  intervalId: null,
+  regions: [],
+  interval: 60,
+  threshold: 200
+};
 
 function createWindow() {
   // 创建浏览器窗口
@@ -228,6 +240,159 @@ function createConfigWindow() {
   });
 }
 
+// 创建延迟检测窗口
+function createLatencyWindow() {
+  if (latencyWindow) {
+    latencyWindow.focus();
+    return;
+  }
+
+  latencyWindow = new BrowserWindow({
+    width: 650,
+    height: 500,
+    parent: mainWindow,
+    modal: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+    title: "延迟检测",
+  });
+
+  latencyWindow.loadFile("latency-check.html");
+
+  // 窗口准备好后发送当前检测状态
+  latencyWindow.webContents.on("did-finish-load", () => {
+    latencyWindow.webContents.send("init-latency-state", {
+      activeRegions: latencyCheckState.regions,
+      interval: latencyCheckState.interval,
+      threshold: latencyCheckState.threshold
+    });
+  });
+
+  latencyWindow.on("closed", () => {
+    latencyWindow = null;
+  });
+}
+
+// 延迟检测函数
+function measureLatency(url) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const urlObj = new URL(url);
+    const client = urlObj.protocol === 'https:' ? https : http;
+    
+    const req = client.request({
+      hostname: urlObj.hostname,
+      port: urlObj.port,
+      path: urlObj.pathname,
+      method: 'GET',
+      timeout: 10000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+      }
+    }, (res) => {
+      const end = Date.now();
+      resolve({
+        success: true,
+        latency: end - start,
+        error: null
+      });
+      res.destroy();
+    });
+    
+    req.on('error', (error) => {
+      const end = Date.now();
+      resolve({
+        success: false,
+        latency: end - start,
+        error: error.message
+      });
+    });
+    
+    req.on('timeout', () => {
+      const end = Date.now();
+      req.destroy();
+      resolve({
+        success: false,
+        latency: end - start,
+        error: 'Timeout'
+      });
+    });
+    
+    req.end();
+  });
+}
+
+// 执行延迟检测
+async function performLatencyCheck() {
+  const results = [];
+  
+  for (const region of latencyCheckState.regions) {
+    const result = await measureLatency(region.url);
+    const latencyResult = {
+      region: region.name,
+      latency: result.latency,
+      success: result.success,
+      timestamp: new Date().toISOString()
+    };
+    
+    results.push(latencyResult);
+    
+    // 如果延迟超过阈值，记录到日志文件
+    if (result.latency > latencyCheckState.threshold) {
+      const logEntry = `${latencyResult.timestamp} - 区域: ${latencyResult.region}, 延迟: ${latencyResult.latency}ms (超过阈值 ${latencyCheckState.threshold}ms)\n`;
+      fs.appendFileSync(path.join(__dirname, 'latency.log'), logEntry, 'utf8');
+    }
+    
+    // 添加阈值信息到结果中
+    latencyResult.threshold = latencyCheckState.threshold;
+  }
+  
+  // 发送结果到主窗口显示
+  if (mainWindow) {
+    mainWindow.webContents.send('latency-results', results);
+  }
+}
+
+// 开始延迟检测
+function startLatencyCheck(config) {
+  // 停止之前的检测
+  stopLatencyCheck();
+  
+  // 如果没有选择区域，只停止检测
+  if (!config.regions || config.regions.length === 0) {
+    // 清除显示
+    if (mainWindow) {
+      mainWindow.webContents.send('latency-results', []);
+    }
+    return;
+  }
+  
+  latencyCheckState.regions = config.regions;
+  latencyCheckState.interval = config.interval;
+  latencyCheckState.threshold = config.threshold;
+  latencyCheckState.isRunning = true;
+  
+  // 立即执行一次检测
+  performLatencyCheck();
+  
+  // 设置定时检测
+  latencyCheckState.intervalId = setInterval(() => {
+    performLatencyCheck();
+  }, config.interval * 1000);
+}
+
+// 停止延迟检测
+function stopLatencyCheck() {
+  if (latencyCheckState.intervalId) {
+    clearInterval(latencyCheckState.intervalId);
+    latencyCheckState.intervalId = null;
+  }
+  latencyCheckState.isRunning = false;
+  latencyCheckState.regions = [];
+}
+
 // 构建区域子菜单
 function buildRegionSubmenu() {
   return regions.map((region) => ({
@@ -293,9 +458,13 @@ function updateMenu() {
       label: "文件",
       submenu: [
         {
-          label: "配置",
+          label: "区域配置",
           accelerator: "CmdOrCtrl+,",
           click: () => createConfigWindow(),
+        },
+        {
+          label: "延迟检测",
+          click: () => createLatencyWindow(),
         },
         {
           label: "退出",
@@ -393,6 +562,24 @@ app.whenReady().then(() => {
       }
     }
   );
+
+  // 延迟检测窗口通信
+  ipcMain.on("close-latency-check", () => {
+    if (latencyWindow) {
+      latencyWindow.close();
+    }
+  });
+
+  ipcMain.on("start-latency-check", (event, config) => {
+    startLatencyCheck(config);
+    // 通知渲染进程更新阈值
+    if (mainWindow) {
+      mainWindow.webContents.send('threshold-updated', config.threshold);
+    }
+    if (latencyWindow) {
+      latencyWindow.close();
+    }
+  });
 });
 
 // 当所有窗口关闭时退出应用
