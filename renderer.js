@@ -73,6 +73,11 @@ ipcRenderer.on('execute-logout', (event, { id, logoutUrl }) => {
   }
 });
 
+// 监听延迟检测结果事件
+ipcRenderer.on('latency-results', (event, results) => {
+  displayLatencyResults(results);
+});
+
 // 创建webview
 function createWebView(id, url) {
   // 检查是否已存在
@@ -151,6 +156,40 @@ function renderTabs() {
     tabContainer.appendChild(tabElement);
   });
 }
+
+// 存储当前阈值设置
+let currentThreshold = 200;
+
+// 显示延迟检测结果
+function displayLatencyResults(results) {
+  const latencyDisplay = document.getElementById('latencyDisplay');
+  
+  if (!results || results.length === 0) {
+    latencyDisplay.style.display = 'none';
+    return;
+  }
+  
+  let html = '';
+  results.forEach(result => {
+    const isHigh = result.latency > (result.threshold || currentThreshold);
+    const latencyClass = isHigh ? 'latency-high' : 'latency-normal';
+    
+    html += `
+      <div class="latency-item">
+        <span class="latency-region">区域: ${result.region}</span>
+        <span class="latency-value ${latencyClass}">${result.latency}ms</span>
+      </div>
+    `;
+  });
+  
+  latencyDisplay.innerHTML = html;
+  latencyDisplay.style.display = 'block';
+}
+
+// 监听阈值更新
+ipcRenderer.on('threshold-updated', (event, threshold) => {
+  currentThreshold = threshold;
+});
 
 // 初始渲染
 renderTabs();
